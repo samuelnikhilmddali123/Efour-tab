@@ -12,6 +12,7 @@ import PaymentWebView from './src/components/PaymentWebView';
 import PaymentStatus from './src/components/PaymentStatus';
 import { generateTicketsForCart } from './src/utils/TicketFormatter';
 import PrinterService, { isNativePrinter } from './src/utils/PrinterService';
+import ridesData from './assets/data/rides.json';
 
 const FEATURED_NAMES = ['ETHREE BUS', 'SUN @ MOON', 'TL TRAIN', 'BALLOON SHOOTING'];
 const TARGET_PRINTER_NAME = 'Printer001-6D49';
@@ -78,12 +79,14 @@ function MainApp({ user, onLogout }) {
 
   const fetchRides = async () => {
     try {
-      const token = await storage.getToken();
-      const response = await axios.get(`${API_URL}/api/products?t=${Date.now()}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setRides(response.data.filter(r => r.name !== 'Free Ride' && r.name !== 'Ticket Summary' && r.status !== 'off'));
-    } catch (err) { console.error(err); } finally { setLoadingRides(false); setRefreshing(false); }
+      // Using local data instead of backend API
+      setRides(ridesData);
+    } catch (err) { 
+      console.error(err); 
+    } finally { 
+      setLoadingRides(false); 
+      setRefreshing(false); 
+    }
   };
 
   const addToCart = (ride) => {
@@ -102,19 +105,15 @@ function MainApp({ user, onLogout }) {
   const initiatePayment = async () => {
     if (cart.length === 0) return;
     try {
-      const token = await storage.getToken();
-      const txnId = `ETH-${Date.now().toString().slice(-8)}`;
-      // FIX: Ensure redirect URLs point to the server API, NOT localhost
-      const res = await axios.post(`${API_URL}/api/payments/initiate`, {
-        amount: cart.reduce((s,i)=>s+(i.price*i.quantity),0).toFixed(2), txnid: txnId, phone: mobile || '0000000000',
-        productinfo: 'Tickets', firstname: user.name, email: user.email,
-        surl: `${API_URL}/api/payments/response?status=success`, furl: `${API_URL}/api/payments/response?status=failure`
-      }, { headers: { Authorization: `Bearer ${token}` } });
-      
-      if (res.data?.url) { 
-        setPaymentUrl(res.data.url); 
-        setPaymentVisible(true); 
-      }
+      // Bypassing payment gateway and server initiation
+      Alert.alert(
+        'Confirm Print',
+        'Process order and print tickets?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Print', onPress: () => handlePaymentSuccess() }
+        ]
+      );
     } catch (err) { 
         setStatusMode('error');
         setStatusVisible(true);
@@ -155,19 +154,8 @@ function MainApp({ user, onLogout }) {
     };
     runPrint();
 
-    // 3. Sync with server in background
-    const syncServer = async () => {
-        try {
-            const token = await storage.getToken();
-            await axios.post(`${API_URL}/api/tickets`, ticketsToPrint.map(t => ({ ...t, createdBy: user.name })), { 
-                headers: { Authorization: `Bearer ${token}` } 
-            });
-            console.log('Server sync successful.');
-        } catch (e) {
-            console.error('Server sync failed:', e);
-        }
-    };
-    syncServer();
+    // 3. Sync with server in background - DISABLED for local-only mode
+    console.log('Server sync disabled in local mode.');
 
     setCart([]); 
     setMobile(''); 

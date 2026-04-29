@@ -30,14 +30,14 @@ export default function AdminDashboard({ onBack, btStatus }) {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const token = await storage.getToken();
-            const config = { headers: { Authorization: `Bearer ${token}` } };
-            const [statsRes, ticketsRes] = await Promise.all([
-                axios.get(`${API_URL}/api/tickets/stats?posId=pos1`, config),
-                axios.get(`${API_URL}/api/tickets?posId=pos1`, config)
-            ]);
-            setStats(statsRes.data);
-            setTickets(ticketsRes.data.filter(t => !t.parentId));
+            // Mocking data for local-only mode
+            setStats({
+                total: 0,
+                revenue: 0,
+                scanned: 0,
+                pending: 0
+            });
+            setTickets([]);
         } catch (err) {
             console.error('Admin Fetch Error:', err);
         } finally {

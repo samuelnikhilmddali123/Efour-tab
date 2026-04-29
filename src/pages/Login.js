@@ -16,22 +16,26 @@ export default function Login({ onLoginSuccess }) {
     }
 
     setLoading(true);
-    try {
-      const response = await axios.post(`${API_URL}/api/auth/login`, {
-        email: email.toLowerCase(),
-        password
-      });
+    // Mocking the backend login
+    setTimeout(async () => {
+      try {
+        const mockUser = {
+          id: 'user1',
+          name: 'Local Admin',
+          email: email.toLowerCase(),
+          role: 'admin'
+        };
+        const mockToken = 'local-mock-token';
 
-      const { token, user } = response.data;
-      await storage.setToken(token);
-      await storage.setUser(user);
-      onLoginSuccess(user);
-    } catch (err) {
-      console.error(err);
-      Alert.alert('Login Failed', err.response?.data?.message || 'Check your credentials and connection.');
-    } finally {
-      setLoading(false);
-    }
+        await storage.setToken(mockToken);
+        await storage.setUser(mockUser);
+        onLoginSuccess(mockUser);
+      } catch (err) {
+        Alert.alert('Login Failed', 'Something went wrong locally.');
+      } finally {
+        setLoading(false);
+      }
+    }, 1000);
   };
 
   return (
