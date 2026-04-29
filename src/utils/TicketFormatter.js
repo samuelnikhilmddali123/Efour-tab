@@ -1,68 +1,72 @@
 /**
- * Formats ticket data into ESC/POS like text commands or structured layout.
- * Since the native printer uses printText, we'll aim for a high-fidelity text-based layout.
+ * Formats ticket data into the EXACT replica of the ETHREE sample image.
+ * Matches spacing and alignment for 32 characters (58mm).
  */
 
 export const formatTicket = (ride, ticketId, mobile, user, paymentMode = 'UPI') => {
     const date = new Date();
-    const dateFormat = `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
+    const dateFormat = `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
     
     let hours = date.getHours();
     const ampm = hours >= 12 ? 'PM' : 'AM';
     hours = hours % 12;
     hours = hours ? hours : 12;
-    const timeFormat = `${String(hours).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')} ${ampm}`;
+    const timeFormat = `${hours}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')} ${ampm}`;
     
-    const shortId = ticketId.split('-').slice(-2).join('-').toUpperCase();
+    const separator = '--------------------------------'; // 32 dashes
+    
+    // ESC/POS Commands
+    const ESC = '\x1b';
+    const CENTER = `${ESC}\x61\x01`;
+    const LEFT = `${ESC}\x61\x00`;
+    const RESET = `${ESC}\x21\x00`;
+    const BOLD = `${ESC}\x21\x08`;
 
-    // ESC/POS Formatting (if library supports it)
-    // We'll use a mix of text and standard Esc/Pos spaces
-    
-    const separator = '--------------------------------';
-    
     let ticket = '';
     
-    // Header
-    ticket += `\x1b\x61\x01`; // Center
-    ticket += `\x1b\x21\x30EFOUR\n`; // Bold + Double height
-    ticket += `\x1b\x21\x00${dateFormat}   ${timeFormat}\n`;
-    ticket += `\x1b\x21\x01ID: ${shortId}\n`;
-    ticket += `${separator}\n`;
+    // Header (Centered)
+    ticket += CENTER;
+    ticket += `${BOLD}ETHREE${RESET}\n`;
+    ticket += `Eat. Enjoy. Entertain\n`;
+    ticket += `${separator}\n\n`; // Spacing after separator
     
-    // Ride Name
-    ticket += `\x1b\x21\x18${ride.name.toUpperCase()}\n`; // Bold + Double height
-    if (ride.name.toLowerCase().includes('combo')) {
-        ticket += `(7 RIDES INCLUDED)\n`;
-    }
+    // Metadata (Left)
+    ticket += LEFT;
+    ticket += `ID: ${ticketId}\n`;
+    ticket += `Date: ${dateFormat}, ${timeFormat}\n\n`; // Spacing after date
     
-    // Price
-    ticket += `\x1b\x21\x30 PRICE: ${ride.price}/-\n`;
-    ticket += `\x1b\x21\x00MODE: ${paymentMode}\n`;
+    // Ride Info
+    const rideName = ride.name.toUpperCase().substring(0, 15);
+    const qtyText = "x1";
+    const spaces = " ".repeat(32 - rideName.length - qtyText.length);
     
-    // Footer
-    ticket += `${separator}\n`;
-    ticket += `\x1b\x21\x01VALID ON BOOKED DATE ONLY\n`;
-    ticket += `EXPIRES ON SCAN\n`;
-    ticket += `NO REFUND - VISIT AGAIN\n\n`;
+    ticket += `${BOLD}${rideName}${spaces}${qtyText}${RESET}\n`;
+    ticket += `Price: INR ${ride.price}\n\n\n`; // Spacing before separator
     
-    ticket += `WWW.EFOUR.IN\n`;
-    ticket += `Ph: 70369 23456\n`;
+    ticket += `${separator}\n\n\n`; // Spacing after separator
     
-    // Cut command (Omitted here as we use cutPaper() in App.js)
-    // ticket += `\x1d\x56\x42\x00`; 
+    // Total
+    ticket += `${BOLD}TOTAL PAYABLE: INR ${ride.price}${RESET}\n\n\n`; // Spacing before UPI
+    
+    // Payment Mode (Centered)
+    ticket += CENTER;
+    ticket += `*** ${paymentMode} ***\n\n\n`; // Spacing before footer
+    
+    // Footer (Centered)
+    ticket += `WWW.ETHREE.IN\n`;
+    ticket += `Support: +91 70369 23456\n`;
+    ticket += `Thank You! Visit Again\n`;
     
     return { text: ticket, id: ticketId };
 };
 
 export const generateTicketsForCart = (cart, masterId, mobile, user, paymentMode) => {
+    if (!cart || cart.length === 0) return [];
     const list = [];
-    cart.forEach((item, index) => {
-        const isCombo = item.name.toLowerCase().includes('combo');
-        const count = isCombo ? (item.quantity * 7) : item.quantity;
-        const prefix = isCombo ? 'C' : 'R';
-        
-        for (let i = 0; i < count; i++) {
-            const subId = `${masterId}-${prefix}${list.length + 1}`;
+    cart.forEach((item) => {
+        const quantity = item.quantity || 1;
+        for (let i = 0; i < quantity; i++) {
+            const subId = `${masterId}-R${list.length + 1}`;
             list.push(formatTicket(item, subId, mobile, user, paymentMode));
         }
     });

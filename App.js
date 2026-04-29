@@ -6,8 +6,8 @@ import { useNetInfo } from '@react-native-community/netinfo';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { API_URL, storage } from './src/api/config';
-import Login from './src/pages/Login';
-import AdminDashboard from './src/pages/AdminDashboard';
+// import Login from './src/pages/Login';
+// import AdminDashboard from './src/pages/AdminDashboard';
 import PaymentWebView from './src/components/PaymentWebView';
 import PaymentStatus from './src/components/PaymentStatus';
 import { generateTicketsForCart } from './src/utils/TicketFormatter';
@@ -18,13 +18,15 @@ const FEATURED_NAMES = ['EFOUR BUS', 'SUN @ MOON', 'TL TRAIN', 'BALLOON SHOOTING
 const TARGET_PRINTER_NAME = 'Printer001-6D49';
 const FALLBACK_IMAGE = require('./assets/public/train_files/stackvil_logo.png');
 
-function MainApp({ user, onLogout }) {
+function MainApp({ user }) {
   const insets = useSafeAreaInsets();
   const netInfo = useNetInfo();
+  const isPrinting = useRef(false);
+  const lastPrintTime = useRef(0);
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
   
-  const [isAdminView, setIsAdminView] = useState(false);
+  // const [isAdminView, setIsAdminView] = useState(false);
   const [cartModalVisible, setCartModalVisible] = useState(false);
   const [showAllRides, setShowAllRides] = useState(false);
   
@@ -40,6 +42,7 @@ function MainApp({ user, onLogout }) {
   const [paymentVisible, setPaymentVisible] = useState(false);
   const [statusVisible, setStatusVisible] = useState(false);
   const [statusMode, setStatusMode] = useState('awaiting'); // awaiting, success, error
+  const [isPrintingState, setIsPrintingState] = useState(false); // For UI disabling
 
   // Connection Loop
   const autoConnect = async () => {
@@ -121,59 +124,62 @@ function MainApp({ user, onLogout }) {
   };
 
   const handlePaymentSuccess = async () => {
-    console.log('Payment success triggered. Starting print process...');
+    // 1. CLEAR CART IMMEDIATELY - Prevents any second print from having data
+    const cartToPrint = [...cart];
+    setCart([]); 
+    setMobile(''); 
+    setCartModalVisible(false);
+
+    // 2. Triple Lock: Ref, State, and Time (5-second throttle)
+    const now = Date.now();
+    if (isPrinting.current || isPrintingState || (now - lastPrintTime.current < 5000)) {
+        console.log("Printing already in progress or throttled");
+        return;
+    }
+    
+    if (cartToPrint.length === 0) {
+        console.log("Nothing to print");
+        return;
+    }
+
+    isPrinting.current = true;
+    setIsPrintingState(true);
+    lastPrintTime.current = now;
+    
+    console.log('--- START PRINT TRANSACTION (V2) ---');
     setPaymentVisible(false);
     setStatusMode('success');
     setStatusVisible(true);
     
     const ticketId = `TXN-${Date.now().toString().slice(-8)}`;
-    const ticketsToPrint = generateTicketsForCart(cart, ticketId, mobile, user, 'UPI');
+    const ticketsToPrint = generateTicketsForCart(cartToPrint, ticketId, mobile, user, 'UPI');
     
-    // 1. Quick Printer Check/Reconnect
-    if (btStatus !== 'connected') {
-        console.log('Printer not connected, attempting quick reconnect...');
-        await autoConnect();
-    }
-
-    // 2. Start Printing Loop (Non-blocking)
     const runPrint = async () => {
-        for (const t of ticketsToPrint) {
-            try {
-                console.log(`Printing ticket: ${t.id}`);
-                
-                // Safety checks for every printer function
-                if (PrinterService.printText) {
-                    await PrinterService.printText(t.text);
+        try {
+            console.log('Action: Connect');
+            await autoConnect();
+
+            for (const t of ticketsToPrint) {
+                try {
+                    console.log(`Action: Print Ticket ${t.id}`);
+                    if (PrinterService.printText) {
+                        await PrinterService.printText(t.text);
+                        await PrinterService.printText("\x0a\x1d\x56\x00"); // Newline + Cut
+                    }
+                    await new Promise(r => setTimeout(r, 1500));
+                } catch (e) {
+                    console.error('Individual Print Error:', e);
                 }
-                
-                if (PrinterService.printQRCode) {
-                    await PrinterService.printQRCode(t.id);
-                }
-                
-                if (PrinterService.printText) {
-                    await PrinterService.printText("\n\n\n\n");
-                }
-                
-                if (PrinterService.cutPaper) {
-                    await PrinterService.cutPaper();
-                }
-                
-                // Small delay between tickets for stability
-                await new Promise(r => setTimeout(r, 500));
-            } catch (e) {
-                console.error('Print Error:', e);
             }
+        } catch (e) {
+            console.error('Global Printer Error:', e);
+        } finally {
+            isPrinting.current = false;
+            setIsPrintingState(false);
+            console.log('--- TRANSACTION FINISHED ---');
         }
-        console.log('Printing loop finished.');
     };
     runPrint();
-
-    // 3. Sync with server in background - DISABLED for local-only mode
-    console.log('Server sync disabled in local mode.');
-
-    setCart([]); 
-    setMobile(''); 
-    setCartModalVisible(false);
   };
 
   const handlePaymentFailure = () => {
@@ -259,15 +265,21 @@ function MainApp({ user, onLogout }) {
             <View><Text style={styles.totalLabel}>Total Payable</Text><Text style={styles.totalValLarge}>₹{cart.reduce((s,i)=>s+(i.price*i.quantity),0)}</Text></View>
             <View style={styles.instantBox}><Text style={styles.instantText}>Instant Print</Text><Text style={styles.readyText}>READY</Text></View>
         </View>
-        <TouchableOpacity style={styles.payBtnFull} onPress={initiatePayment}>
-            <View style={styles.printerCircle}><Ionicons name="print" size={14} color="#0f172a" /></View>
-            <Text style={styles.payBtnTextFull}>PRINT FINAL TICKET</Text>
+        <TouchableOpacity 
+            style={[styles.payBtnFull, (isPrintingState || cart.length === 0) && {opacity: 0.5}]} 
+            onPress={initiatePayment}
+            disabled={isPrintingState || cart.length === 0}
+        >
+            <View style={styles.printerCircle}>
+                {isPrintingState ? <ActivityIndicator size="small" color="#0f172a" /> : <Ionicons name="print" size={14} color="#0f172a" />}
+            </View>
+            <Text style={styles.payBtnTextFull}>{isPrintingState ? 'PRINTING...' : 'PRINT FINAL TICKET'}</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 
-  if (isAdminView) return <AdminDashboard onBack={() => setIsAdminView(false)} btStatus={btStatus} />;
+  // if (isAdminView) return <AdminDashboard onBack={() => setIsAdminView(false)} btStatus={btStatus} />;
 
   return (
     <View style={styles.root}>
@@ -282,8 +294,8 @@ function MainApp({ user, onLogout }) {
                 <TouchableOpacity onPress={handleTestPrint} style={styles.testBtn}>
                     <Text style={styles.testBtnText}>TEST</Text>
                 </TouchableOpacity>
-                {user.role === 'admin' && <TouchableOpacity onPress={() => setIsAdminView(true)} style={styles.adminBadge}><Text style={styles.adminLabel}>ADMIN</Text></TouchableOpacity>}
-                <TouchableOpacity onPress={onLogout} style={styles.logoutBtn}><Ionicons name="log-out-outline" size={20} color="#fff" /></TouchableOpacity>
+                {/* {user.role === 'admin' && <TouchableOpacity onPress={() => setIsAdminView(true)} style={styles.adminBadge}><Text style={styles.adminLabel}>ADMIN</Text></TouchableOpacity>} */}
+                {/* Logout button removed */}
             </View>
          </View>
       </View>
@@ -317,15 +329,18 @@ function MainApp({ user, onLogout }) {
 }
 
 export default function App() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [user] = useState({
+    id: 'user1',
+    name: 'Local Admin',
+    email: 'admin@efour.com',
+    role: 'admin'
+  });
 
-  useEffect(() => {
-    storage.getUser().then(u => { if (u) setUser(u); setLoading(false); });
-  }, []);
-
-  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#0084c2" /></View>;
-  return <SafeAreaProvider>{user ? <MainApp user={user} onLogout={async () => { await storage.clear(); setUser(null); }} /> : <Login onLoginSuccess={setUser} />}</SafeAreaProvider>;
+  return (
+    <SafeAreaProvider>
+      <MainApp user={user} />
+    </SafeAreaProvider>
+  );
 }
 
 const styles = StyleSheet.create({
