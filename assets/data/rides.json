@@ -1,0 +1,20 @@
+[
+  {
+    "id": 1,
+    "name": "TL TRAIN",
+    "price": 50,
+    "desc": "A classic train ride perfect for families and children. Enjoy a scenic tour around the park in our comfortable and safe trackless train."
+  },
+  {
+    "id": 2,
+    "name": "ETHREE BUS",
+    "price": 100,
+    "desc": "Hop on the ETHREE Shuttle Bus for a fun and easy way to navigate the park. A favorite for kids who love big vehicles!"
+  },
+  {
+    "id": 3,
+    "name": "SUN @ MOON",
+    "price": 100,
+    "desc": "A gentle and charming rotary ride that takes you on a celestial journey. Beautifully designed for our younger guests."
+  }
+]
