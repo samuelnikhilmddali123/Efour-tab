@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const API_URL = 'https://swampland-situated-barbell.ngrok-free.dev';
+export const API_URL = 'https://e4-tab-server.abhinavgoldandsilver.com';
 
 const safeStorage = AsyncStorage || {
   getItem: () => Promise.resolve(null),

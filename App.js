@@ -13,6 +13,7 @@ import PaymentStatus from './src/components/PaymentStatus';
 import { generateTicketsForCart } from './src/utils/TicketFormatter';
 import { PrinterService, isNativePrinter } from './src/utils/PrinterService';
 import ridesData from './assets/data/rides.json';
+import { RIDE_IMAGES } from './assets/rides/index.js';
 
 const FEATURED_NAMES = ['EFOUR BUS', 'SUN @ MOON', 'TL TRAIN', 'BALLOON SHOOTING'];
 const TARGET_PRINTER_NAME = 'Printer001-6D49';
@@ -82,10 +83,13 @@ function MainApp({ user }) {
 
   const fetchRides = async () => {
     try {
-      // Using local data instead of backend API
-      setRides(ridesData);
+      const response = await axios.get(`${API_URL}/api/products`);
+      // Only show Soft Play as requested
+      const filtered = response.data.filter(r => r.name.toLowerCase().includes('soft play'));
+      setRides(filtered);
     } catch (err) { 
-      console.error(err); 
+      console.error('Fetch Rides Error:', err); 
+      setRides(ridesData); // Fallback to local data
     } finally { 
       setLoadingRides(false); 
       setRefreshing(false); 
@@ -105,35 +109,70 @@ function MainApp({ user }) {
     setCart(cart.map(item => (item.cartId === cartId ? { ...item, quantity: Math.max(0, item.quantity + delta) } : item)).filter(i => i.quantity > 0));
   };
 
+  const [isInitiating, setIsInitiating] = useState(false);
+
   const initiatePayment = async () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || isInitiating) return;
+    setIsInitiating(true);
+    
+    // We only support UPI for this flow as requested
+    const totalAmount = cart.reduce((s, i) => s + (i.price * i.quantity), 0);
+    const txnId = `TXN-${Date.now().toString().slice(-8)}`;
+
     try {
-      // Bypassing payment gateway and server initiation
-      Alert.alert(
-        'Confirm Print',
-        'Process order and print tickets?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Print', onPress: () => handlePaymentSuccess() }
-        ]
-      );
+      // 1. Prepare Payment Info
+      const paymentInfo = {
+        amount: totalAmount.toFixed(2),
+        txnid: txnId,
+        productinfo: cart.map(i => i.name).join(', '),
+        firstname: user.name?.split(' ')[0] || 'Cashier',
+        email: user.email || 'pos@efour.com',
+        phone: mobile || '9999999999',
+        // surl and furl are handled by the WebView's navigation state listener
+        // Added returnUrl to match production backend expectation
+        surl: `${API_URL}/api/payments/response?status=success&returnUrl=http://localhost/success`,
+        furl: `${API_URL}/api/payments/response?status=failure&returnUrl=http://localhost/failure`
+      };
+
+      // 2. Call backend to initiate Easebuzz
+      const res = await axios.post(`${API_URL}/api/payments/initiate`, paymentInfo);
+      
+      if (res.data && res.data.url) {
+        // Construct gateway URL if needed (some backends return just the access key)
+        const gatewayUrl = 'https://pay.easebuzz.in/pay/'; // Always production for this project
+        const targetUrl = res.data.url.startsWith('http') 
+          ? res.data.url 
+          : `${gatewayUrl}${res.data.url}`;
+
+        console.log('Initiating payment:', targetUrl);
+        setCartModalVisible(false); // Close cart modal to avoid UI conflicts on mobile
+        setPaymentUrl(targetUrl);
+        setPaymentVisible(true);
+      } else {
+        throw new Error('Invalid response from payment server');
+      }
     } catch (err) { 
-        setStatusMode('error');
-        setStatusVisible(true);
+        console.error('Payment Initiation Error:', err);
+        Alert.alert('Payment Error', 'Could not connect to payment gateway. Please check your internet.');
+    } finally {
+        setIsInitiating(false);
     }
   };
 
   const handlePaymentSuccess = async () => {
-    // 1. CLEAR CART IMMEDIATELY - Prevents any second print from having data
+    // 1. Store cart to print and clear current cart
     const cartToPrint = [...cart];
+    const mobileToPrint = mobile;
+    const totalToPrint = cartToPrint.reduce((s, i) => s + (i.price * i.quantity), 0);
+    
     setCart([]); 
     setMobile(''); 
     setCartModalVisible(false);
+    setPaymentVisible(false); // Close WebView if open
 
-    // 2. Triple Lock: Ref, State, and Time (5-second throttle)
+    // 2. Prevent double prints
     const now = Date.now();
     if (isPrinting.current || isPrintingState || (now - lastPrintTime.current < 5000)) {
-        console.log("Printing already in progress or throttled");
         return;
     }
     
@@ -147,17 +186,32 @@ function MainApp({ user }) {
     lastPrintTime.current = now;
     
     console.log('--- START PRINT TRANSACTION (V2) ---');
-    setPaymentVisible(false);
     setStatusMode('success');
     setStatusVisible(true);
     
     const ticketId = `TXN-${Date.now().toString().slice(-8)}`;
-    const ticketsToPrint = generateTicketsForCart(cartToPrint, ticketId, mobile, user, 'UPI');
+    const ticketsToPrint = generateTicketsForCart(cartToPrint, ticketId, mobileToPrint, user, 'UPI');
     
     const runPrint = async () => {
         try {
             console.log('Action: Connect');
             await autoConnect();
+
+            // Record transaction to backend
+            try {
+                await axios.post(`${API_URL}/api/tickets`, {
+                    id: ticketId,
+                    items: cartToPrint,
+                    amount: totalToPrint,
+                    mobile: mobileToPrint,
+                    paymentMode: 'UPI',
+                    createdBy: user.name,
+                    posId: 'pos1'
+                });
+                console.log('Ticket recorded to backend');
+            } catch (err) {
+                console.error('Failed to record ticket to backend:', err);
+            }
 
             for (const t of ticketsToPrint) {
                 try {
@@ -206,12 +260,31 @@ function MainApp({ user }) {
   const moreCardWidth = isLandscape ? (width * 0.65 / 2) - 20 : (width / 2) - 20;
   const cardHeight = isLandscape ? (height - 200) / 2 : 280;
 
-  const renderRideCard = ({ item }) => {
-    const imageUri = item.image ? `${API_URL}/images/${encodeURIComponent(item.image)}?ngrok-skip-browser-warning=1` : null;
+  const RideCard = ({ item, moreCardWidth, cardHeight }) => {
+    // 1. Prepare Remote URI (ngrok)
+    const remoteUri = item.image 
+      ? `https://swampland-situated-barbell.ngrok-free.dev/images/${item.image.split('/').map(part => encodeURIComponent(part)).join('/')}?ngrok-skip-browser-warning=1` 
+      : null;
+    
+    // 2. Prepare Local Fallback (bundled assets)
+    const imagePath = item.image ? item.image.replace(/^\//, '') : '';
+    const localAsset = RIDE_IMAGES[imagePath] || FALLBACK_IMAGE;
+
+    // 3. State to manage which one to use
+    const [useLocal, setUseLocal] = useState(!remoteUri);
+
     return (
       <View style={[styles.rideCard, { width: moreCardWidth, height: cardHeight }]}>
         <View style={styles.imageContainer}>
-            <Image source={imageUri ? { uri: imageUri } : FALLBACK_IMAGE} style={styles.rideImage} defaultSource={FALLBACK_IMAGE} />
+            <Image 
+                source={useLocal ? localAsset : { uri: remoteUri }} 
+                style={styles.rideImage} 
+                defaultSource={FALLBACK_IMAGE}
+                onError={() => {
+                    console.log(`Remote image failed for ${item.name}, using local fallback.`);
+                    setUseLocal(true);
+                }}
+            />
             <View style={styles.imageOverlay} />
             <View style={styles.imageTextRow}>
                 <Text style={styles.cardTitle} numberOfLines={1}>{item.name.toUpperCase()}</Text>
@@ -236,12 +309,17 @@ function MainApp({ user }) {
     </TouchableOpacity>
   );
 
-  const renderItem = ({ item }) => (item.id === 'more-button' ? renderMoreCard() : renderRideCard({ item }));
+  const renderItem = ({ item }) => (
+    item.id === 'more-button' 
+      ? renderMoreCard() 
+      : <RideCard item={item} moreCardWidth={moreCardWidth} cardHeight={cardHeight} />
+  );
 
-  const featured = rides.filter(r => FEATURED_NAMES.includes(r.name.toUpperCase()));
-  const finalDisplay = showAllRides ? rides : featured;
-  const listData = [...finalDisplay];
-  if (rides.length > 4) listData.push({ id: 'more-button' });
+  const featured = rides;
+  const finalDisplay = rides;
+  const listData = [...rides];
+  // Remove more-button if we are only showing Soft Play
+  // if (rides.length > 4) listData.push({ id: 'more-button' });
 
   const renderCart = () => (
     <View style={styles.cartContainer}>
@@ -266,14 +344,14 @@ function MainApp({ user }) {
             <View style={styles.instantBox}><Text style={styles.instantText}>Instant Print</Text><Text style={styles.readyText}>READY</Text></View>
         </View>
         <TouchableOpacity 
-            style={[styles.payBtnFull, (isPrintingState || cart.length === 0) && {opacity: 0.5}]} 
+            style={[styles.payBtnFull, (isPrintingState || isInitiating || cart.length === 0) && {opacity: 0.5}]} 
             onPress={initiatePayment}
-            disabled={isPrintingState || cart.length === 0}
+            disabled={isPrintingState || isInitiating || cart.length === 0}
         >
             <View style={styles.printerCircle}>
-                {isPrintingState ? <ActivityIndicator size="small" color="#0f172a" /> : <Ionicons name="print" size={14} color="#0f172a" />}
+                {(isPrintingState || isInitiating) ? <ActivityIndicator size="small" color="#0f172a" /> : <Ionicons name="print" size={14} color="#0f172a" />}
             </View>
-            <Text style={styles.payBtnTextFull}>{isPrintingState ? 'PRINTING...' : 'PRINT FINAL TICKET'}</Text>
+            <Text style={styles.payBtnTextFull}>{(isPrintingState || isInitiating) ? 'PROCESSING...' : 'PRINT FINAL TICKET'}</Text>
         </TouchableOpacity>
       </View>
     </View>
