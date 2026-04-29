@@ -11,10 +11,10 @@ import AdminDashboard from './src/pages/AdminDashboard';
 import PaymentWebView from './src/components/PaymentWebView';
 import PaymentStatus from './src/components/PaymentStatus';
 import { generateTicketsForCart } from './src/utils/TicketFormatter';
-import PrinterService, { isNativePrinter } from './src/utils/PrinterService';
+import { PrinterService, isNativePrinter } from './src/utils/PrinterService';
 import ridesData from './assets/data/rides.json';
 
-const FEATURED_NAMES = ['ETHREE BUS', 'SUN @ MOON', 'TL TRAIN', 'BALLOON SHOOTING'];
+const FEATURED_NAMES = ['EFOUR BUS', 'SUN @ MOON', 'TL TRAIN', 'BALLOON SHOOTING'];
 const TARGET_PRINTER_NAME = 'Printer001-6D49';
 const FALLBACK_IMAGE = require('./assets/public/train_files/stackvil_logo.png');
 
@@ -140,10 +140,24 @@ function MainApp({ user, onLogout }) {
         for (const t of ticketsToPrint) {
             try {
                 console.log(`Printing ticket: ${t.id}`);
-                await PrinterService.printText(t.text);
-                if (PrinterService.printQRCode) await PrinterService.printQRCode(t.id);
-                await PrinterService.printText("\n\n\n\n");
-                await PrinterService.cutPaper();
+                
+                // Safety checks for every printer function
+                if (PrinterService.printText) {
+                    await PrinterService.printText(t.text);
+                }
+                
+                if (PrinterService.printQRCode) {
+                    await PrinterService.printQRCode(t.id);
+                }
+                
+                if (PrinterService.printText) {
+                    await PrinterService.printText("\n\n\n\n");
+                }
+                
+                if (PrinterService.cutPaper) {
+                    await PrinterService.cutPaper();
+                }
+                
                 // Small delay between tickets for stability
                 await new Promise(r => setTimeout(r, 500));
             } catch (e) {
@@ -170,8 +184,12 @@ function MainApp({ user, onLogout }) {
 
   const handleTestPrint = async () => {
     try {
-      await PrinterService.printText("ETHREE POS TEST PRINT\n" + new Date().toLocaleString() + "\n\n\n\n");
-      await PrinterService.cutPaper();
+      if (PrinterService.printText) {
+        await PrinterService.printText("EFOUR POS TEST PRINT\n" + new Date().toLocaleString() + "\n\n\n\n");
+      }
+      if (PrinterService.cutPaper) {
+        await PrinterService.cutPaper();
+      }
       Alert.alert('Success', 'Test print sent.');
     } catch (e) {
       Alert.alert('Error', 'Test print failed: ' + e.message);
@@ -256,7 +274,7 @@ function MainApp({ user, onLogout }) {
       <View style={[styles.header, { paddingTop: insets.top + 5 }]}>
          <View style={styles.headerTop}>
             <Image source={require('./assets/public/logo.jpeg')} style={styles.headerLogo} />
-            <Text style={styles.headerTitle}>ETHREE <Text style={{color:'#f0c05a'}}>POS</Text></Text>
+            <Text style={styles.headerTitle}>EFOUR <Text style={{color:'#f0c05a'}}>POS</Text></Text>
             <View style={styles.headerActions}>
                 <View style={[styles.btIndicator, {backgroundColor: btStatus === 'connected' ? '#10b981' : '#ef4444'}]}>
                     <Text style={styles.btText}>{btStatus.toUpperCase()}</Text>

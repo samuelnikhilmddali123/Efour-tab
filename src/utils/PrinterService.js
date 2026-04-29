@@ -38,7 +38,6 @@ const mockPrinter = {
   }
 };
 
-const PrinterService = BLEPrinter || mockPrinter;
-
-export default PrinterService;
+// Use the native printer if available, otherwise use mock
+export const PrinterService = BLEPrinter || mockPrinter;
 export const isNativePrinter = !!BLEPrinter;

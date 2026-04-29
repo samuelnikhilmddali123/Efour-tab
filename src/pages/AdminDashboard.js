@@ -92,7 +92,7 @@ export default function AdminDashboard({ onBack, btStatus }) {
                         <Ionicons name="apps" size={24} color="#fff" />
                     </TouchableOpacity>
                     <View>
-                        <Text style={styles.headerTitle}>ETHREE <Text style={{color:'#3b82f6'}}>ADMIN</Text></Text>
+                        <Text style={styles.headerTitle}>EFOUR <Text style={{color:'#3b82f6'}}>ADMIN</Text></Text>
                         <Text style={styles.headerSub}>MANAGEMENT & REPRINT CONSOLE</Text>
                     </View>
                     <View style={[styles.btBadge, {backgroundColor: btStatus === 'connected' ? '#10b981' : '#64748b'}]}>

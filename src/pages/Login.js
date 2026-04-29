@@ -46,7 +46,7 @@ export default function Login({ onLoginSuccess }) {
           
           <View style={styles.header}>
             <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>ETHREE POS SYSTEM</Text>
+            <Text style={styles.subtitle}>EFOUR POS SYSTEM</Text>
           </View>
 
           <View style={styles.inputGroup}>

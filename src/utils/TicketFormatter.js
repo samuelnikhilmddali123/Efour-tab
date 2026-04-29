@@ -24,7 +24,7 @@ export const formatTicket = (ride, ticketId, mobile, user, paymentMode = 'UPI') 
     
     // Header
     ticket += `\x1b\x61\x01`; // Center
-    ticket += `\x1b\x21\x30ETHREE\n`; // Bold + Double height
+    ticket += `\x1b\x21\x30EFOUR\n`; // Bold + Double height
     ticket += `\x1b\x21\x00${dateFormat}   ${timeFormat}\n`;
     ticket += `\x1b\x21\x01ID: ${shortId}\n`;
     ticket += `${separator}\n`;
@@ -45,7 +45,7 @@ export const formatTicket = (ride, ticketId, mobile, user, paymentMode = 'UPI') 
     ticket += `EXPIRES ON SCAN\n`;
     ticket += `NO REFUND - VISIT AGAIN\n\n`;
     
-    ticket += `WWW.ETHREE.IN\n`;
+    ticket += `WWW.EFOUR.IN\n`;
     ticket += `Ph: 70369 23456\n`;
     
     // Cut command (Omitted here as we use cutPaper() in App.js)
