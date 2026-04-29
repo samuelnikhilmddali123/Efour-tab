@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "tab-software",
-    "slug": "tab-software",
+    "name": "Efour Tab",
+    "slug": "efour-tab",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -39,7 +39,7 @@
         "android.permission.BLUETOOTH_ADMIN",
         "android.permission.BLUETOOTH_CONNECT"
       ],
-      "package": "com.anonymous.tabsoftware"
+      "package": "com.anonymous.efourtab"
     },
     "web": {
       "favicon": "./assets/favicon.png"
