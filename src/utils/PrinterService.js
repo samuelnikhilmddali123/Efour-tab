@@ -11,6 +11,10 @@ try {
   console.log('PrinterService: Native module load failed, using mock.');
 }
 
+// ESC/POS Command Constants
+const GS = '\x1d';
+const GS_V_CUT = `${GS}\x56\x00`;
+
 const mockPrinter = {
   init: () => {
     console.log('MockPrinter: init');
@@ -41,3 +45,4 @@ const mockPrinter = {
 // Use the native printer if available, otherwise use mock
 export const PrinterService = BLEPrinter || mockPrinter;
 export const isNativePrinter = !!BLEPrinter;
+export { GS_V_CUT };

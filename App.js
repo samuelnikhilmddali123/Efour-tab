@@ -6,18 +6,17 @@ import { useNetInfo } from '@react-native-community/netinfo';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { API_URL, storage } from './src/api/config';
-// import Login from './src/pages/Login';
-// import AdminDashboard from './src/pages/AdminDashboard';
+// Imports removed for login and admin dashboard
 import PaymentWebView from './src/components/PaymentWebView';
 import PaymentStatus from './src/components/PaymentStatus';
 import { generateTicketsForCart } from './src/utils/TicketFormatter';
-import { PrinterService, isNativePrinter } from './src/utils/PrinterService';
+import { PrinterService, isNativePrinter, GS_V_CUT } from './src/utils/PrinterService';
 import ridesData from './assets/data/rides.json';
 import { RIDE_IMAGES } from './assets/rides/index.js';
 
 const FEATURED_NAMES = ['EFOUR BUS', 'SUN @ MOON', 'TL TRAIN', 'BALLOON SHOOTING'];
-const TARGET_PRINTER_NAME = 'Printer001-6D49';
-const FALLBACK_IMAGE = require('./assets/public/train_files/stackvil_logo.png');
+const TARGET_PRINTER_NAME = 'Printer001';
+const FALLBACK_IMAGE = require('./assets/public/train_files/stackvil_logo.jpg');
 
 function MainApp({ user }) {
   const insets = useSafeAreaInsets();
@@ -126,7 +125,7 @@ function MainApp({ user }) {
         txnid: txnId,
         productinfo: cart.map(i => i.name).join(', '),
         firstname: user.name?.split(' ')[0] || 'Cashier',
-        email: user.email || 'pos@efour.com',
+        email: user.email || 'pos@efour-eluru.com',
         phone: mobile || '9999999999',
         // surl and furl are handled by the WebView's navigation state listener
         // Added returnUrl to match production backend expectation
@@ -218,7 +217,6 @@ function MainApp({ user }) {
                     console.log(`Action: Print Ticket ${t.id}`);
                     if (PrinterService.printText) {
                         await PrinterService.printText(t.text);
-                        await PrinterService.printText("\x0a\x1d\x56\x00"); // Newline + Cut
                     }
                     await new Promise(r => setTimeout(r, 1500));
                 } catch (e) {
@@ -245,10 +243,7 @@ function MainApp({ user }) {
   const handleTestPrint = async () => {
     try {
       if (PrinterService.printText) {
-        await PrinterService.printText("EFOUR POS TEST PRINT\n" + new Date().toLocaleString() + "\n\n\n\n");
-      }
-      if (PrinterService.cutPaper) {
-        await PrinterService.cutPaper();
+        await PrinterService.printText("EFOUR POS TEST PRINT\n" + new Date().toLocaleString() + `\n\n\n\n${GS_V_CUT}`);
       }
       Alert.alert('Success', 'Test print sent.');
     } catch (e) {
@@ -267,7 +262,7 @@ function MainApp({ user }) {
       : null;
     
     // 2. Prepare Local Fallback (bundled assets)
-    const imagePath = item.image ? item.image.replace(/^\//, '') : '';
+    const imagePath = (item.image ? item.image.replace(/^\//, '') : '').replace(/ /g, '_');
     const localAsset = RIDE_IMAGES[imagePath] || FALLBACK_IMAGE;
 
     // 3. State to manage which one to use
@@ -410,7 +405,7 @@ export default function App() {
   const [user] = useState({
     id: 'user1',
     name: 'Local Admin',
-    email: 'admin@efour.com',
+    email: 'admin@efour-eluru.com',
     role: 'admin'
   });
 
